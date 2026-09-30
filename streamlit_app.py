@@ -1,5 +1,9 @@
 import numpy as np
 from scipy.stats import poisson
+import streamlit as st
+
+# Configuration de la page Streamlit
+st.set_page_config(page_title="Bot Pronostic FIFA", page_icon="⚽", layout="centered")
 
 def parse_matches(match_string):
     """
@@ -53,12 +57,10 @@ def predict_fifa_match(team_a_name, team_a_str, team_b_name, team_b_str, max_goa
     def_b = np.sum(np.array(conceded_b) * weights_b)
 
     # 3. Estimation des taux d'intensité (Expected Goals / xG)
-    # λ_A (buts attendus pour A) = Force offensive de A croisée avec la faiblesse défensive de B
     lambda_a = (att_a + def_b) / 2.0
     lambda_b = (att_b + def_a) / 2.0
 
     # 4. Génération de la matrice de probabilités de Poisson croisées
-    # On calcule P(X = i) pour l'équipe A et P(Y = j) pour l'équipe B
     grid_size = max_goals + 1
     matrix = np.zeros((grid_size, grid_size))
 
@@ -82,30 +84,43 @@ def predict_fifa_match(team_a_name, team_a_str, team_b_name, team_b_str, max_goa
     # Tri décroissant selon la probabilité
     scores_probabilities.sort(key=lambda x: x[1], reverse=True)
 
-    # Retourne les prédictions et les xG estimés
     return lambda_a, lambda_b, scores_probabilities[:3]
 
 # ==========================================
-# EXEMPLE CONCRET D'UTILISATION
+# INTERFACE GRAPHIQUE STREAMLIT
 # ==========================================
-if __name__ == "__main__":
-    # Formats : "ButsMarqués-ButsEncaissés" (du plus récent au plus ancien)
-    # Équipe A (ex: Real Madrid - Virtuel)
-    form_equipe_a = "3-1, 2-2, 4-0, 1-1, 2-0"
+st.title("⚽ Bot de Prédiction - Matchs FIFA")
+st.write("Entrez les 5 derniers scores de chaque équipe (du plus récent au plus ancien) au format `ButsMarqués-ButsEncaissés`.")
+
+col1, col2 = st.columns(2)
+
+with col1:
+    nom_a = st.text_input("Équipe A", "Real Madrid")
+    form_equipe_a = st.text_input(f"Forme de {nom_a}", "3-1, 2-2, 4-0, 1-1, 2-0")
+
+with col2:
+    nom_b = st.text_input("Équipe B", "Man City")
+    form_equipe_b = st.text_input(f"Forme de {nom_b}", "2-2, 1-0, 3-2, 0-1, 2-1")
+
+st.markdown("---")
+
+if st.button("Calculer les pronostics", type="primary"):
+    try:
+        xG_a, xG_b, top_3_scores = predict_fifa_match(nom_a, form_equipe_a, nom_b, form_equipe_b)
+        
+        st.success("Analyse statistique effectuée avec succès !")
+        
+        # Affichage des xG
+        col_m1, col_m2 = st.columns(2)
+        col_m1.metric(f"Buts attendus (xG) : {nom_a}", f"{xG_a:.2f}")
+        col_m2.metric(f"Buts attendus (xG) : {nom_b}", f"{xG_b:.2f}")
+        
+        st.markdown("### 🎯 Top 3 des scores exacts les plus probables :")
+        
+        for rank, (score, prob) in enumerate(top_3_scores, 1):
+            st.info(f"**{rank}.** {score}  ➡️  **{prob:.2f}%** de chance")
+            
+    except Exception as e:
+        st.error(f"Une erreur est survenue dans le format des données : {e}")
     
-    # Équipe B (ex: Manchester City - Virtuel)
-    form_equipe_b = "2-2, 1-0, 3-2, 0-1, 2-1"
-
-    nom_a = "Real Madrid"
-    nom_b = "Man City"
-
-    xG_a, xG_b, top_3_scores = predict_fifa_match(nom_a, form_equipe_a, nom_b, form_equipe_b)
-
-    print(f"--- ANALYSE STATISTIQUE DU MATCH : {nom_a} vs {nom_b} ---")
-    print(f"Buts attendus (xG) -> {nom_a}: {xG_a:.2f} | {nom_b}: {xG_b:.2f}\n")
-    print("Top 3 des scores exacts les plus probables :")
-    print("-" * 45)
-    
-    for rank, (score, prob) in enumerate(top_3_scores, 1):
-        print(f"{rank}. {score}  --->  {prob:.2f}%")
     
